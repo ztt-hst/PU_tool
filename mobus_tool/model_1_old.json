@@ -1,0 +1,87 @@
+{
+    "group": {
+        "label": "Model 1",
+        "name": "pu_Custom",
+        "points": [
+            {
+                "name": "ID",
+                "label": "Model ID",
+                "desc": "Model identifier",
+                "type": "uint16",
+                "size": 1,
+                "static": "S",
+                "mandatory": "M",
+                "offset": 0
+            },
+            {
+                "name": "L",
+                "label": "Model Length",
+                "desc": "Model length",
+                "type": "uint16",
+                "size": 1,
+                "static": "S",
+                "mandatory": "M",
+                "offset": 1
+            },
+            {
+                "name": "manufacturer",
+                "label": "manufacturer",
+                "desc": "manufacturer",
+                "type": "string",
+                "size": 16,
+                "offset": 2
+            },
+            {
+                "name": "model",
+                "label": "model",
+                "desc": "model",
+                "type": "string",
+                "size": 16,
+                "offset": 18
+            },
+            {
+                "name": "options",
+                "label": "options",
+                "desc": "options",
+                "type": "uint16",
+                "size": 8,
+                "offset": 34
+            },
+            {
+                "name": "version",
+                "label": "version",
+                "desc": "version",
+                "type": "string",
+                "size": 8,
+                "offset": 42
+            },
+            {
+                "name": "serial_number",
+                "label": "serial_number",
+                "desc": "serial_number",
+                "type": "string",
+                "size": 16,
+                "offset": 50
+            },
+            {
+                "access": "RW",
+                "name": "device_addr",
+                "label": "device_addr",
+                "desc": "device_addr",
+                "type": "uint16",
+                "size": 1,
+                "offset": 66
+            },
+            {
+                "name": "pad",
+                "label": "pad",
+                "desc": "pad",
+                "type": "uint16",
+                "size": 1,
+                "offset": 67
+            }
+        ],
+        "type": "group"
+    },
+    "id": 1
+} 
