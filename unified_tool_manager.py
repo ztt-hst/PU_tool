@@ -179,13 +179,13 @@ class UnifiedToolManager:
         lang_frame = ttk.LabelFrame(parent_frame, text="语言设置", padding="5")
         lang_frame.pack(fill="x", pady=(0, 10))
         
-        # 语言选择
+        # 语言选择（只读显示）
         ttk.Label(lang_frame, text="语言/Language:").pack(side=tk.LEFT, padx=(0, 5))
         self.lang_var = tk.StringVar(value="zh")
         lang_combo = ttk.Combobox(lang_frame, textvariable=self.lang_var, 
-                                 values=["zh", "en"], state="readonly", width=8)
+                                 values=["zh", "en"], state="disabled", width=8)
         lang_combo.pack(side=tk.LEFT, padx=(0, 5))
-        lang_combo.bind("<<ComboboxSelected>>", self.on_language_change)
+        # 下拉框设置为disabled状态，用户无法操作，只能显示当前语言
         
         # 语言切换按钮
         self.lang_btn = ttk.Button(lang_frame, text="切换语言", command=self.toggle_language)

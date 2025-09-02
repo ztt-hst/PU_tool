@@ -58,7 +58,7 @@ exe = EXE(
     name='PU_Integrated_Tools',
     debug=False, bootloader_ignore_signals=False, strip=False,
     upx=True, upx_exclude=[], runtime_tmpdir=None,
-    console=True,  # 先保留，便于看日志；确认OK后可改回 False
+    console=False,  # 先保留，便于看日志；确认OK后可改回 False
     disable_windowed_traceback=False, argv_emulation=False,
     target_arch=None, codesign_identity=None, entitlements_file=None,
     icon='mobus_tool/BQC.ico',
