@@ -398,9 +398,9 @@ def parse_35E_message(data):
 def parse_35F_message(data):
     """解析0x35F报文 - 电池模型、固件版本、在线容量"""
     if len(data) >= 8:
-        Battery_Model = unsigned_16bit(data[2], data[1])
-        Firmware_version = unsigned_16bit(data[4], data[3])
-        Online_capacity_in_Ah = unsigned_16bit(data[6], data[5])
+        Battery_Model = unsigned_16bit(data[1], data[0])
+        Firmware_version = unsigned_16bit(data[3], data[2])
+        Online_capacity_in_Ah = unsigned_16bit(data[5], data[4])
         return {
             'Battery_Model': Battery_Model,
             'Firmware_version': Firmware_version,
