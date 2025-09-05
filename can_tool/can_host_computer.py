@@ -760,98 +760,7 @@ class CANHostComputer:
         data[5] = ord('I')  # Byte 5: ASCII 'I'
         data[6] = ord('C')  # Byte 6: ASCII 'C'
         data[7] = 0x00  # Byte 7: reserved for future use
-        return data
-                
-    def parse_heartbeat_message(self, msg):
-        """解析0x351报文 - 充放电信息（用作心跳标志）"""
-        try:
-            data = msg['data']
-            parsed_data = parse_351_message(data)
-            
-            if parsed_data:
-                # 更新表格
-                self.update_table_data(0x351, parsed_data)
-                
-                self.log_message(f"充放电信息 - 充电电压限制: {parsed_data['charge_voltage_limit']:.1f}V, 最大充电电流: {parsed_data['max_charge_current']:.1f}A, 最大放电电流: {parsed_data['max_discharge_current']:.1f}A, 放电电压: {parsed_data['discharge_voltage']:.1f}V")
-            else:
-                self.log_message(f"0x351报文数据长度不足: {len(data)} 字节")
-                
-        except Exception as e:
-            self.log_message(f"解析0x351报文错误: {str(e)}")
-    
-    def parse_bms_status_message(self, msg):
-        """解析BMS状态报文 (0x355)"""
-        try:
-            data = msg['data']
-            parsed_data = parse_355_message(data)
-            
-            if parsed_data:
-                # 更新表格
-                self.update_table_data(0x355, parsed_data)
-                
-                self.log_message(f"BMS状态 - SOC: {parsed_data['soc_value']}%, SOH: {parsed_data['soh_value']}%, 高精度SOC: {parsed_data['high_res_soc']:.2f}%")
-            else:
-                self.log_message(f"0x355报文数据长度不足: {len(data)} 字节")
-                
-        except Exception as e:
-            self.log_message(f"解析BMS状态报文错误: {str(e)}")
-    
-    def parse_battery_info_message(self, msg):
-        """解析电池信息报文 (0x356)"""
-        try:
-            data = msg['data']
-            parsed_data = parse_356_message(data)
-            
-            if parsed_data:
-                # 更新表格
-                self.update_table_data(0x356, parsed_data)
-                
-                self.log_message(f"电池信息 - 电压: {parsed_data['battery_voltage']:.2f}V, 电流: {parsed_data['battery_current']:.1f}A, 温度: {parsed_data['battery_temperature']:.1f}°C")
-            else:
-                self.log_message(f"0x356报文数据长度不足: {len(data)} 字节")
-                
-        except Exception as e:
-            self.log_message(f"解析电池信息报文错误: {str(e)}")
-    
-    def parse_error_message(self, msg):
-        """解析错误报文 (0x35A)"""
-        try:
-            data = msg['data']
-            parsed_data = parse_35A_message(data)
-            
-            if parsed_data:
-                # 更新表格
-                self.update_table_data(0x35A, parsed_data)
-                
-                # 记录警告信息
-                warnings = parsed_data['warnings']
-                active_warnings = [name for name, active in warnings.items() if active]
-                if active_warnings:
-                    self.log_message(f"检测到警告: {', '.join(active_warnings)}")
-                else:
-                    self.log_message("无警告信息")
-            else:
-                self.log_message(f"0x35A报文数据长度不足: {len(data)} 字节")
-                
-        except Exception as e:
-            self.log_message(f"解析错误报文错误: {str(e)}")
-    
-    def parse_new_message(self, msg):
-        """解析新的CAN报文"""
-        msg_id = msg['id']
-        data = msg['data']
-        
-        try:
-            # 使用通用解析函数
-            parsed_data = parse_can_message(msg_id, data)
-            if parsed_data:
-                # 统一使用现有的update_table_data方法
-                self.update_table_data(msg_id, parsed_data)
-                self.log_message(f"成功解析 0x{msg_id:03X}: {parsed_data}")
-            else:
-                self.log_message(f"无法解析报文: ID=0x{msg_id:03X}")
-        except Exception as e:
-            self.log_message(f"解析报文 0x{msg_id:03X} 出错: {str(e)}")
+        return data               
     def parse_can_message(self, msg):
         """解析CAN报文"""
         msg_id = msg['id']
@@ -946,21 +855,6 @@ class CANHostComputer:
             
             # 根据协议解析具体内容
             self.parse_can_message(msg)
-            # if msg_id == 0x351:
-            #     self.parse_heartbeat_message(msg)
-            # elif msg_id == 0x355:
-            #     self.parse_bms_status_message(msg)
-            # elif msg_id == 0x356:
-            #     self.parse_battery_info_message(msg)
-            # elif msg_id == 0x35A:
-            #     self.parse_error_message(msg)
-            # elif msg_id == 0x35E:
-            #     self.parse_35E_message(msg)
-            # elif msg_id == 0x35F:
-            #     self.parse_35F_message(msg)
-            # else:
-            #     # 处理新的CAN ID
-            #     self.parse_new_message(msg)
                 
     def handle_heartbeat_timeout(self):
         """处理心跳超时"""
