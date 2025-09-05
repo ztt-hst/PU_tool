@@ -79,6 +79,11 @@ class FakeCANBus:
         v = int(val) & 0xFFFFFFFF
         return bytes([(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF])
 
+    @staticmethod
+    def _u8_be(val):
+        v = int(val) & 0xFF
+        return bytes([v])
+
     def _mk_msg(self, can_id, payload8):
         return {'id': can_id, 'data': bytes(payload8), 'length': len(payload8), 'timestamp': time.time()}
 
@@ -180,6 +185,12 @@ class FakeCANBus:
         can_id = 0x260 | (self._battery_addr & 0x0F)
         return self._mk_msg(can_id, data)
 
+    def _frame_27n(self):
+        Arm_Antitheft_mode = self._rng.randint(0, 1)
+        external_output = self._rng.randint(0, 2)
+        data = bytes([Arm_Antitheft_mode, external_output]) + b'\x00\x00\x00\x00\x00\x00'
+        can_id = 0x270 | (self._battery_addr & 0x0F)
+        return self._mk_msg(can_id, data)
     # ---- 版本帧：0x45n/0x46n/0x47n/0x48n ----
     @staticmethod
     def _split16_ascii(s: str):
@@ -256,6 +267,7 @@ class FakeCANBus:
                 self._frame_24n(),
                 self._frame_25n(),
                 self._frame_26n(),
+                self._frame_27n(),
             ]
 
             # 版本帧（45n/46n/47n/48n）

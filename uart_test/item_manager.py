@@ -10,13 +10,28 @@ class ItemManager:
         self.organized_items = {}
         self.load_items()
 
+    def get_resource_path(self, filename):
+        if getattr(sys, 'frozen', False):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(__file__)
+        return os.path.join(base_path, filename)
+
     def load_items(self):
         try:
-            # 直接使用传入的完整路径
+            # 解析配置文件路径：支持绝对路径、相对调用cwd、以及模块相对路径
             json_path = self.json_file
+            if not os.path.isabs(json_path):
+                # 先尝试当前工作目录
+                cwd_path = os.path.abspath(json_path)
+                if os.path.exists(cwd_path):
+                    json_path = cwd_path
+                else:
+                    # 回退到模块目录
+                    json_path = self.get_resource_path(self.json_file)
             
             if not os.path.exists(json_path):
-                raise FileNotFoundError(f"找不到配置文件: {self.json_file}")
+                raise FileNotFoundError(f"找不到配置文件: {json_path}")
                 
             with open(json_path, 'r', encoding='utf-8') as f:
                 self.items = json.load(f)

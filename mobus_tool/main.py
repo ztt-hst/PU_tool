@@ -670,13 +670,14 @@ class SunSpecGUI:
             self.log_message(f"模型{table_id}长度无效: {scanned_length}")
             return
         
-        # 使用扫描到的长度来读取数据
-        if scanned_length <= 125:
+        # 使用扫描到的长度来读取数据（需包含ID+L两个寄存器）
+        total_length = scanned_length + 2
+        if total_length <= 125:
             # 一次性读取
-            data = self.modbus_client.read_holding_registers(base_addr, scanned_length)
+            data = self.modbus_client.read_holding_registers(base_addr, total_length)
         else:
             # 分段读取
-            data = self.read_registers_in_chunks(base_addr, scanned_length)
+            data = self.read_registers_in_chunks(base_addr, total_length)
             
         if data:
             parsed = self.sunspec_protocol.parse_table_data(table_id, data)

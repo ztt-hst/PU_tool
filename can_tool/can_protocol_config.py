@@ -142,6 +142,14 @@ MESSAGE_STRUCTURES = {
             {'name': 'cell_temperature_4', 'offset': 6, 'length': 2, 'data_type': 'int16', 'scaling': 0.1, 'unit': '°C','description': 'Cell temperature 4 in °C'},
         ]
     },
+    0x270: {
+        'name': '配置信息',
+        'length': 8,
+        'fields': [
+            {'name': 'Arm_Antitheft_mode', 'offset': 0, 'length': 1, 'data_type': 'uint8', 'scaling': 1, 'description': 'ARM防盗模式'},
+            {'name': 'external_output', 'offset': 1, 'length': 1, 'data_type': 'uint8', 'scaling': 1, 'description': '外部输出'},
+        ]
+    },
     0x400: {
         'name': '系统参数',
         'length': 8,
@@ -378,7 +386,27 @@ def parse_35A_message(data):
     else:
         return None
 
+def parse_35E_message(data):
+    """解析0x35E报文 - 厂商名称"""
+    if len(data) >= 8:
+        Manufacturer_name = ''.join([chr(b) for b in data if b != 0])
+        return {
+            'Manufacturer_name': Manufacturer_name,
+        }
+    return None
 
+def parse_35F_message(data):
+    """解析0x35F报文 - 电池模型、固件版本、在线容量"""
+    if len(data) >= 8:
+        Battery_Model = unsigned_16bit(data[2], data[1])
+        Firmware_version = unsigned_16bit(data[4], data[3])
+        Online_capacity_in_Ah = unsigned_16bit(data[6], data[5])
+        return {
+            'Battery_Model': Battery_Model,
+            'Firmware_version': Firmware_version,
+            'Online_capacity_in_Ah': Online_capacity_in_Ah,
+        }
+    return None
 # 通用解析函数
 def unsigned_16bit(high_byte, low_byte):
     """将两个字节转换为无符号16位整数"""
@@ -392,6 +420,52 @@ def unsigned_32bit(byte3, byte2, byte1, byte0):
     """将四个字节转换为无符号32位整数"""
     return (byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0
 
+# def parse_20n_message(data, battery_address=1):
+#     """解析0x20n报文 - 电池模式和状态"""
+#     if len(data) >= 8:
+#         operation_mode = data[0] & 0x07  # bits 0-2
+#         state_of_charge = data[1] * 0.5  # SOC in 0.5% resolution     
+#         # Status bits (16-bit bitfield from bytes 2-3)
+#         status_bits = unsigned_16bit(data[3], data[2])
+#         status = {
+#             'Heater': bool(status_bits & 0x01),
+#             'MCB status': bool(status_bits & 0x02),
+#             'Top Up': bool(status_bits & 0x04),
+#             'Soft Start': bool(status_bits & 0x08),
+#             'OCC Recovery': bool(status_bits & 0x10),
+#         }      
+#         # Alarms (32-bit bitfield from bytes 4-7)
+#         alarms_bits = unsigned_32bit(data[7], data[6], data[5], data[4])
+#         alarms = {
+#             'COTC': bool(alarms_bits & 0x01),
+#             'COTD': bool(alarms_bits & 0x02),
+#             'CUTC': bool(alarms_bits & 0x04),
+#             'CUTD': bool(alarms_bits & 0x08),
+#             'System Lock': bool(alarms_bits & 0x10),
+#             'SCD': bool(alarms_bits & 0x20),
+#             'MOT': bool(alarms_bits & 0x40),
+#             'DCDC_OT': bool(alarms_bits & 0x80),
+#             'CMC': bool(alarms_bits & 0x100),
+#             'BVP': bool(alarms_bits & 0x200),
+#             'CTD': bool(alarms_bits & 0x400),
+#             'MCB_TRIP': bool(alarms_bits & 0x800),
+#             'UCM': bool(alarms_bits & 0x1000),
+#             'WDT': bool(alarms_bits & 0x2000),
+#             'U_SOC': bool(alarms_bits & 0x4000),
+#             'CUVC': bool(alarms_bits & 0x8000),
+#             'CUV': bool(alarms_bits & 0x10000),
+#             'COV': bool(alarms_bits & 0x20000),
+#             'OCC': bool(alarms_bits & 0x40000),
+#             'OCD': bool(alarms_bits & 0x80000),
+#         }       
+#         return {
+#             'operation_mode': operation_mode,
+#             'state_of_charge': state_of_charge,
+#             'status': status,
+#             'alarms': alarms,
+#             'battery_address': battery_address
+#         }
+#     return None
 def parse_20n_message(data, battery_address=1):
     """解析0x20n报文 - 电池模式和状态"""
     if len(data) >= 8:
@@ -400,44 +474,67 @@ def parse_20n_message(data, battery_address=1):
         
         # Status bits (16-bit bitfield from bytes 2-3)
         status_bits = unsigned_16bit(data[3], data[2])
-        status = {
-            'Heater': bool(status_bits & 0x01),
-            'MCB status': bool(status_bits & 0x02),
-            'Top Up': bool(status_bits & 0x04),
-            'Soft Start': bool(status_bits & 0x08),
-            'OCC Recovery': bool(status_bits & 0x10),
-        }
-        
+        Heater= bool(status_bits & 0x01)
+        MCB_status= bool(status_bits & 0x02)
+        Top_Up= bool(status_bits & 0x04)
+        Soft_Start= bool(status_bits & 0x08)
+        OCC_Recovery= bool(status_bits & 0x10)       
         # Alarms (32-bit bitfield from bytes 4-7)
         alarms_bits = unsigned_32bit(data[7], data[6], data[5], data[4])
-        alarms = {
-            'COTC': bool(alarms_bits & 0x01),
-            'COTD': bool(alarms_bits & 0x02),
-            'CUTC': bool(alarms_bits & 0x04),
-            'CUTD': bool(alarms_bits & 0x08),
-            'System Lock': bool(alarms_bits & 0x10),
-            'SCD': bool(alarms_bits & 0x20),
-            'MOT': bool(alarms_bits & 0x40),
-            'DCDC_OT': bool(alarms_bits & 0x80),
-            'CMC': bool(alarms_bits & 0x100),
-            'BVP': bool(alarms_bits & 0x200),
-            'CTD': bool(alarms_bits & 0x400),
-            'MCB_TRIP': bool(alarms_bits & 0x800),
-            'UCM': bool(alarms_bits & 0x1000),
-            'WDT': bool(alarms_bits & 0x2000),
-            'U_SOC': bool(alarms_bits & 0x4000),
-            'CUVC': bool(alarms_bits & 0x8000),
-            'CUV': bool(alarms_bits & 0x10000),
-            'COV': bool(alarms_bits & 0x20000),
-            'OCC': bool(alarms_bits & 0x40000),
-            'OCD': bool(alarms_bits & 0x80000),
-        }
+        COTC= bool(alarms_bits & 0x01)
+        COTD= bool(alarms_bits & 0x02)
+        CUTC= bool(alarms_bits & 0x04)
+        CUTD= bool(alarms_bits & 0x08)
+        System_Lock= bool(alarms_bits & 0x10)
+        SCD= bool(alarms_bits & 0x20)
+        MOT= bool(alarms_bits & 0x40)
+        DCDC_OT= bool(alarms_bits & 0x80)
+        CMC= bool(alarms_bits & 0x100)
+        BVP= bool(alarms_bits & 0x200)
+        CTD= bool(alarms_bits & 0x400)
+        MCB_TRIP= bool(alarms_bits & 0x800)
+        UCM= bool(alarms_bits & 0x1000)
+        WDT= bool(alarms_bits & 0x2000)
+        U_SOC= bool(alarms_bits & 0x4000)
+        CUVC= bool(alarms_bits & 0x8000)
+        CUV= bool(alarms_bits & 0x10000)
+        COV= bool(alarms_bits & 0x20000)
+        OCC= bool(alarms_bits & 0x40000)
+        OCD= bool(alarms_bits & 0x80000)
+        DCDC_CC= bool(alarms_bits & 0x100000)
         
         return {
             'operation_mode': operation_mode,
             'state_of_charge': state_of_charge,
-            'status': status,
-            'alarms': alarms,
+            #status
+            'Heater': Heater,
+            'MCB_status': MCB_status,
+            'Top_Up': Top_Up,
+            'Soft_Start': Soft_Start,
+            'OCC_Recovery': OCC_Recovery,
+            #alarms
+            'COTC': COTC,
+            'COTD': COTD,
+            'CUTC': CUTC,
+            'CUTD': CUTD,
+            'System_Lock': System_Lock,
+            'SCD': SCD,
+            'MOT': MOT,
+            'DCDC_OT': DCDC_OT,
+            'CMC': CMC,
+            'BVP': BVP,
+            'CTD': CTD,
+            'MCB_TRIP': MCB_TRIP,
+            'UCM': UCM,
+            'WDT': WDT,
+            'U_SOC': U_SOC,
+            'CUVC': CUVC,
+            'CUV': CUV,
+            'COV': COV,
+            'OCC': OCC,
+            'OCD': OCD,
+            'DCDC_CC': DCDC_CC,
+            #battery_address
             'battery_address': battery_address
         }
     return None
@@ -515,6 +612,18 @@ def parse_26n_message(data, battery_address=1):
             'cell_temperature_2': signed_16bit(data[3], data[2]) * 0.1,
             'cell_temperature_3': signed_16bit(data[5], data[4]) * 0.1,
             'cell_temperature_4': signed_16bit(data[7], data[6]) * 0.1,
+            'battery_address': battery_address
+        }
+    return None
+def parse_27n_message(data, battery_address=1):
+    """解析0x20n报文 - On configuration from site controller"""
+    if len(data) >= 8:
+        Arm_Antitheft_mode = data[0] & 0x01
+        external_output = data[1]
+        
+        return {
+            'Arm_Antitheft_mode': Arm_Antitheft_mode,
+            'external_output': external_output,
             'battery_address': battery_address
         }
     return None
@@ -660,7 +769,10 @@ def parse_can_message(can_id, data):
         return parse_356_message(data)
     elif can_id == 0x35A:
         return parse_35A_message(data)
-    
+    elif can_id == 0x35E:
+        return parse_35E_message(data)
+    elif can_id == 0x35F:
+        return parse_35F_message(data)
     # 新增的报文解析
     battery_address = get_battery_address_from_can_id(can_id)
     
@@ -679,6 +791,8 @@ def parse_can_message(can_id, data):
         return parse_25n_message(data, battery_address)
     elif (can_id & 0xFF0) == 0x260:
         return parse_26n_message(data, battery_address)
+    elif (can_id & 0xFF0) == 0x270:
+        return parse_27n_message(data, battery_address)
     
     # 0x40n系列
     elif (can_id & 0xFF0) == 0x400:

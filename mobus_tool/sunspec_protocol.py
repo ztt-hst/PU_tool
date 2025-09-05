@@ -64,8 +64,9 @@ class SunSpecProtocol:
             base_path = sys._MEIPASS
             return os.path.join(base_path, filename)
         else:
-            # 如果是开发环境
-            return filename
+            # 如果是开发环境：使用模块目录
+            module_dir = os.path.dirname(__file__)
+            return os.path.join(module_dir, filename)
 
     def parse_table_data(self, table_id, data):
         """解析表格数据，支持model_xxx.json格式"""
@@ -154,7 +155,7 @@ class SunSpecProtocol:
             }
             
             current_offset = offset + size
-# 解析子groups部分（动态重复）
+        # 解析子groups部分（动态重复）
         if groups:
             # 计算固定points部分的长度
             fixed_points_length = 0
@@ -273,8 +274,48 @@ class SunSpecProtocol:
             
         model_data = self.models[table_id]
         points = model_data['group']['points']
+         # 首先检查是否是动态group字段
+        if '_' in field_name and field_name.count('_') >= 2:
+            #print(f"DEBUG: Checking dynamic group field: {field_name}")
+            # 动态group字段格式：GroupName_index_fieldName
+            parts = field_name.split('_')
+            if len(parts) >= 3:
+                group_name = parts[0]
+                try:
+                    group_index = int(parts[1])
+                    original_field_name = '_'.join(parts[2:])  # 处理field_name中包含下划线的情况
+                    #print(f"DEBUG: Parsed group: {group_name}, index: {group_index}, field: {original_field_name}")
+                    
+                    # 在groups中查找对应的group定义
+                    groups = model_data['group'].get('groups', [])
+                    #print(f"DEBUG: Available groups: {[g.get('name', 'unnamed') for g in groups]}")
+                    
+                    for group in groups:
+                        if group['name'] == group_name:
+                            #print(f"DEBUG: Found matching group: {group_name}")
+                            group_points = group['points']
+                            for gp in group_points:
+                                if gp['name'] == original_field_name:
+                                    #print(f"DEBUG: Found matching field: {original_field_name}")
+                                    field_type = gp['type'].lower()
+                                    size = gp.get('size', 1)
+                                    
+                                    # 检查数据长度是否足够
+                                    if len(data) < size:
+                                        #print(f"DEBUG: Data length {len(data)} insufficient for size {size}")
+                                        return None
+                                    
+                                    # 解析数据（复用下面的解析逻辑）
+                                    result = self._parse_field_data(data, field_type, size, gp, original_field_name)
+                                    #print(f"DEBUG: Parse result: {result}")
+                                    return result
+                            #print(f"DEBUG: Field {original_field_name} not found in group {group_name}")
+                    #print(f"DEBUG: Group {group_name} not found")
+                except ValueError:
+                    #print(f"DEBUG: ValueError parsing group index from {parts[1]}")
+                    pass  # 如果无法解析索引，继续尝试普通字段解析
         
-        # 找到指定字段
+        #普通字段解析
         for point in points:
             if point['name'] == field_name:
                 field_type = point['type'].lower()
@@ -284,85 +325,90 @@ class SunSpecProtocol:
                 if len(data) < size:
                     return None
                 
-                # 根据类型解析
-                if field_type in ['uint16', 'sunssf']:
-                    raw_value = data[0]
-                    if field_type == 'sunssf':
-                        # sunssf是有符号的
-                        if raw_value > 32767:
-                            raw_value = raw_value - 65536
-                    value = raw_value
-                    
-                elif field_type == 'int16':
-                    raw_value = data[0]
-                    if raw_value > 32767:
-                        raw_value = raw_value - 65536
-                    value = raw_value
-                    
-                elif field_type == 'uint32':
-                    if size >= 2:
-                        raw_value = (data[0] << 16) | data[1]
-                        value = raw_value
-                    else:
-                        return None
-                        
-                elif field_type == 'int32':
-                    if size >= 2:
-                        raw_value = (data[0] << 16) | data[1]
-                        if raw_value > 0x7FFFFFFF:
-                            raw_value = raw_value - 0x100000000
-                        value = raw_value
-                    else:
-                        return None
-                        
-                elif field_type == 'enum16':
-                    # enum16 使用1个寄存器，按uint16解析
-                    raw_value = data[0]
-                    value = raw_value
-                    
-                elif field_type == 'bitfield32':
-                    # bitfield32 使用2个寄存器，按uint32解析
-                    if size >= 2:
-                        raw_value = (data[0] << 16) | data[1]
-                        value = raw_value
-                    else:
-                        return None
-                        
-                elif field_type == 'string':
-                    # 字符串解析：每个寄存器2字节
-                    chars = []
-                    for reg in data:                      
-                        chars.append(chr((reg >> 8) & 0xFF))
-                        chars.append(chr(reg & 0xFF))
-                    value = ''.join(chars).rstrip('\x00').strip()
-                    raw_value = value
-                    
-                elif field_type == "hex":
-                    # hex类型：直接显示16进制数据
-                    hex_values = []
-                    for reg in data:
-                        hex_values.append(f"{reg:04X}")
-                    value = ' '.join(hex_values)  # 用空格分隔多个寄存器
-                    raw_value = value
-                    
-                else:
-                    # 其他类型直接显示原始
-                    value = data[0]
-                    raw_value = data[0]
-                
-                # 移除缩放因子处理，统一显示原始值
-                return {
-                    'value': value,
-                    'raw': raw_value,
-                    'unit': point.get('units', ''),
-                    'type': field_type,
-                    'label': point.get('label', field_name),
-                    'description': point.get('desc', ''),
-                    'access': 'rw' if 'access' in point and point['access'] == 'RW' else 'r'
-                }
+                # 解析数据
+                result = self._parse_field_data(data, field_type, size, point, field_name)
+                #print(f"DEBUG: Parse result: {result}")
+                return result
         
         return None
-
+    def _parse_field_data(self, data, field_type, size, point, field_name):
+        """解析字段数据的通用方法"""
+        # 根据类型解析
+        if field_type in ['uint16', 'sunssf']:
+            raw_value = data[0]
+            if field_type == 'sunssf':
+                # sunssf是有符号的
+                if raw_value > 32767:
+                    raw_value = raw_value - 65536
+            value = raw_value
+            
+        elif field_type == 'int16':
+            raw_value = data[0]
+            if raw_value > 32767:
+                raw_value = raw_value - 65536
+            value = raw_value
+            
+        elif field_type == 'uint32':
+            if size >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                value = raw_value
+            else:
+                return None
+                
+        elif field_type == 'int32':
+            if size >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                if raw_value > 0x7FFFFFFF:
+                    raw_value = raw_value - 0x100000000
+                value = raw_value
+            else:
+                return None
+                
+        elif field_type == 'enum16':
+            # enum16 使用1个寄存器，按uint16解析
+            raw_value = data[0]
+            value = raw_value
+            
+        elif field_type == 'bitfield32':
+            # bitfield32 使用2个寄存器，按uint32解析
+            if size >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                value = raw_value
+            else:
+                return None
+                
+        elif field_type == 'string':
+            # 字符串解析：每个寄存器2字节
+            chars = []
+            for reg in data:                      
+                chars.append(chr((reg >> 8) & 0xFF))
+                chars.append(chr(reg & 0xFF))
+            value = ''.join(chars).rstrip('\x00').strip()
+            raw_value = value
+            
+        elif field_type == "hex":
+            # hex类型：直接显示16进制数据
+            hex_values = []
+            for reg in data:
+                hex_values.append(f"{reg:04X}")
+            value = ' '.join(hex_values)  # 用空格分隔多个寄存器
+            raw_value = value
+            
+        else:
+            # 其他类型直接显示原始
+            value = data[0]
+            raw_value = data[0]
+        
+        # 移除缩放因子处理，统一显示原始值
+        return {
+            'value': value,
+            'raw': raw_value,
+            'unit': point.get('units', ''),
+            'type': field_type,
+            'label': point.get('label', field_name),
+            'description': point.get('desc', ''),
+            'access': 'rw' if 'access' in point and point['access'] == 'RW' else 'r'
+        }
     def set_model_base_address(self, model_id, address):
         """设置特定模型的基地址"""
         self.model_base_addrs[model_id] = address

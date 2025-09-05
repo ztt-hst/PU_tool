@@ -10,8 +10,8 @@ def get_resource_path(filename):
         # PyInstaller打包后的exe
         base_path = sys._MEIPASS
     else:
-        # 源码运行
-        base_path = os.path.abspath(".")
+        # 源码运行：使用模块所在目录
+        base_path = os.path.dirname(__file__)
     return os.path.join(base_path, filename)
 
 class LabelManager:

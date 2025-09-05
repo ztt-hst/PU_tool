@@ -181,9 +181,19 @@ class DataTableFrame(ttk.Frame):
                                 self.language_manager.get_text("please_scan_model_addr_first"))
             return     
         base_addr = self.main_window.model_base_addrs[self.table_id]     
-        offset = self.fields[field_name]["offset"]
+        field_info = self.fields[field_name]
+        
+        # 对于动态group字段，offset已经是相对于模型起始地址的正确偏移
+        if field_info.get('is_dynamic_group', False):
+            offset = field_info["offset"]
+        else:
+            # 对于普通字段，offset是从JSON文件读取的相对偏移
+            offset = field_info["offset"]
+            
         addr = base_addr + offset
-        length = self.fields[field_name]["size"]
+        length = field_info["size"]
+        addr = base_addr + offset
+        length = field_info["size"]
         
         # 读取数据
         data = self.modbus_client.read_holding_registers(addr, length)
