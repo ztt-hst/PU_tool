@@ -11,7 +11,7 @@ a = Analysis(
         ('model_802.json', '.'),
         ('model_805.json', '.'),
         ('model_64900.json', '.'),
-        ('model_64901.json', '.'),
+        ('model_64950.json', '.'),
         ('BQC.ico', '.'),  # 添加图标文件到数据文件
     ],
     hiddenimports=[

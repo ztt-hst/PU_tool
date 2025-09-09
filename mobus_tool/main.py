@@ -80,6 +80,8 @@ class SunSpecGUI:
         # 新增：日志文件相关
         self.log_file_path = self.get_default_log_file()
         self.log_file_var = None  # 将在setup_gui中设置
+        # 添加线程锁，确保Modbus操作的线程安全
+        self.modbus_lock = threading.Lock()
         
         self.setup_gui()
         self.bind_events()
@@ -170,6 +172,12 @@ class SunSpecGUI:
             btn_frame, text="自动读取全部表格", variable=self.auto_read_all_var, command=self.on_auto_read_all_changed
         )
         self.auto_read_all_check.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # 自动读取间隔设置
+        ttk.Label(btn_frame, text="间隔(秒):").pack(side=tk.LEFT, padx=(10, 2))
+        self.auto_read_interval_var = tk.StringVar(value="5")
+        interval_entry = ttk.Entry(btn_frame, textvariable=self.auto_read_interval_var, width=5)
+        interval_entry.pack(side=tk.LEFT)
 
         # 创建标签页容器
         self.notebook = ttk.Notebook(main_frame)
@@ -237,11 +245,11 @@ class SunSpecGUI:
         if self.language_manager.set_language(modbus_language):
             self.update_interface_text()
             
-            # 强制刷新界面
-            if hasattr(self, 'root') and self.root:
-                self.root.update_idletasks()
-            elif hasattr(self, 'main_frame') and self.main_frame:
-                self.main_frame.update_idletasks()
+            # 强制刷新界面（减少频率）
+            # if hasattr(self, 'root') and self.root:
+            #     self.root.update_idletasks()
+            # elif hasattr(self, 'main_frame') and self.main_frame:
+            #     self.main_frame.update_idletasks()
                 
             print(f"Modbus工具语言设置完成: {language}")
         else:
@@ -512,9 +520,22 @@ class SunSpecGUI:
         # 显示在GUI中
         self.log_text.insert(tk.END, log_entry)
         self.log_text.see(tk.END)
-        # 只在独立模式下更新root
-        if not self.is_embedded and self.root:
-            self.root.update_idletasks()
+        
+        # 限制日志行数，避免内存占用过多
+        lines = int(self.log_text.index('end-1c').split('.')[0])
+        if lines > 1000:  # 保持最多1000行日志
+            self.log_text.delete('1.0', '100.0')  # 删除前100行
+        
+        # 减少UI更新频率，避免卡顿（仅在必要时更新）
+        if not self.is_embedded and self.root and hasattr(self, '_last_ui_update'):
+            import time
+            current_time = time.time()
+            if current_time - self._last_ui_update > 0.1:  # 最多每100ms更新一次UI
+                self.root.update_idletasks()
+                self._last_ui_update = current_time
+        elif not hasattr(self, '_last_ui_update'):
+            import time
+            self._last_ui_update = time.time()
         
         # 如果开启了自动保存且有有效的文件路径，则写入文件
         if (hasattr(self, 'auto_save_log_var') and self.auto_save_log_var.get() and 
@@ -651,6 +672,7 @@ class SunSpecGUI:
             messagebox.showwarning(self.language_manager.get_text("warning"), 
                                     self.language_manager.get_text("please_scan_model_addr_first"))
             return 
+        
         # 获取基地址
         base_addr = self.model_base_addrs[table_id]
         self.log_message(f"读取表格{table_id}，使用扫描地址: {base_addr}")
@@ -688,6 +710,8 @@ class SunSpecGUI:
                 self.log_message(f"表格{table_id}解析失败")
         else:
             self.log_message(f"表格{table_id}读取失败")
+
+
 
     def read_registers_in_chunks(self, base_addr, total_length, chunk_size=125):
         """
@@ -840,19 +864,65 @@ class SunSpecGUI:
                                     self.language_manager.get_text("please_scan_model_addr_first"))
             return 
         self._auto_read_all_running = True
-        self.schedule_auto_read_all()
+        # 启动后台线程进行自动读取
+        self.auto_read_thread = threading.Thread(target=self.auto_read_worker, daemon=True)
+        self.auto_read_thread.start()
 
     def stop_auto_read_all(self):
         """停止自动读取全部表格"""
         self._auto_read_all_running = False
+        if hasattr(self, 'auto_read_thread'):
+            # 等待线程结束（最多等待1秒）
+            if self.auto_read_thread.is_alive():
+                self.auto_read_thread.join(timeout=1.0)
 
-    def schedule_auto_read_all(self):
-        """调度自动读取全部表格"""
-        if getattr(self, "_auto_read_all_running", False):
+    def auto_read_worker(self):
+        """后台线程工作函数，执行自动读取"""
+        while getattr(self, "_auto_read_all_running", False):
+            try:
+                # 获取用户设置的间隔时间
+                try:
+                    interval = float(self.auto_read_interval_var.get())
+                    if interval < 1:
+                        interval = 1  # 最小间隔1秒
+                    elif interval > 60:
+                        interval = 60  # 最大间隔60秒
+                except:
+                    interval = 5  # 默认5秒
+                
+                # 在主线程中执行读取操作
+                self.schedule_read_all_tables()
+                
+                # 等待指定时间后继续下一次读取
+                sleep_steps = int(interval * 10)  # 分成0.1秒的小段，便于快速响应停止信号
+                for _ in range(sleep_steps):
+                    if not getattr(self, "_auto_read_all_running", False):
+                        break
+                    time.sleep(0.1)
+            except Exception as e:
+                # 在主线程中记录错误日志
+                self.schedule_log_message(f"自动读取出错: {e}")
+                break
+
+    def schedule_read_all_tables(self):
+        """在主线程中调度读取全部表格"""
+        if not self.is_embedded and self.root:
+            self.root.after_idle(self.read_all_tables)
+        elif self.is_embedded and self.parent_frame:
+            self.parent_frame.winfo_toplevel().after_idle(self.read_all_tables)
+        else:
+            # 直接调用（备用方案）
             self.read_all_tables()
-            # 5秒后再次调用（只在独立模式下）
-            if not self.is_embedded and self.root:
-                self.root.after(5000, self.schedule_auto_read_all)
+
+    def schedule_log_message(self, message):
+        """在主线程中调度日志消息"""
+        if not self.is_embedded and self.root:
+            self.root.after_idle(lambda: self.log_message(message))
+        elif self.is_embedded and self.parent_frame:
+            self.parent_frame.winfo_toplevel().after_idle(lambda: self.log_message(message))
+        else:
+            # 直接调用（备用方案）
+            self.log_message(message)
 
     def run(self):
         # 只在独立模式下设置关闭事件和主循环

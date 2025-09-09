@@ -127,6 +127,9 @@ class UnifiedToolManager:
         self.notebook = ttk.Notebook(main_frame)
         self.notebook.pack(fill=tk.BOTH, expand=True)
         
+        # 绑定标签页切换事件，强制刷新界面
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+        
         # 状态栏
         self.status_var = tk.StringVar(value="就绪 - 请选择工具标签页")
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN)
@@ -191,6 +194,109 @@ class UnifiedToolManager:
         self.lang_btn = ttk.Button(lang_frame, text="切换语言", command=self.toggle_language)
         self.lang_btn.pack(side=tk.LEFT, padx=(10, 0))
     
+    def on_tab_changed(self, event=None):
+        """标签页切换事件处理"""
+        try:
+            # 获取当前选中的标签页索引
+            current_tab = self.notebook.select()
+            if current_tab:
+                # 立即刷新一次
+                self.force_refresh_current_tab()
+                
+                # 延迟100ms再次刷新，确保完全显示
+                self.root.after(100, self.delayed_refresh)
+                
+                # 更新状态栏
+                tab_text = self.notebook.tab(current_tab, "text")
+                self.status_var.set(f"当前工具: {tab_text}")
+                
+        except Exception as e:
+            print(f"标签页切换处理错误: {e}")
+    
+    def delayed_refresh(self):
+        """延迟刷新，确保控件完全显示"""
+        try:
+            self.force_refresh_current_tab()
+        except Exception as e:
+            print(f"延迟刷新错误: {e}")
+    
+    def force_refresh_current_tab(self):
+        """强制刷新当前标签页"""
+        try:
+            # 获取当前选中的标签页
+            current_tab = self.notebook.select()
+            if not current_tab:
+                return
+                
+            # 获取标签页的框架
+            tab_frame = self.notebook.nametowidget(current_tab)
+            
+            # 强制更新布局
+            tab_frame.update_idletasks()
+            tab_frame.update()
+            
+            # 递归更新所有子控件
+            self.recursive_update_widgets(tab_frame)
+            
+            # 特殊处理UART工具的画布刷新
+            self.special_refresh_uart_tool()
+            
+            # 强制刷新主窗口
+            self.root.update_idletasks()
+            self.root.update()
+            
+        except Exception as e:
+            print(f"强制刷新标签页错误: {e}")
+    
+    def special_refresh_uart_tool(self):
+        """特殊处理所有工具的刷新"""
+        try:
+            # 检查当前标签页
+            current_tab = self.notebook.select()
+            if current_tab:
+                tab_text = self.notebook.tab(current_tab, "text")
+                
+                # 处理UART工具
+                if "UART" in tab_text and 'uart' in self.tools:
+                    uart_wrapper = self.tools['uart']
+                    if hasattr(uart_wrapper, 'uart_tool') and uart_wrapper.uart_tool:
+                        if hasattr(uart_wrapper.uart_tool, 'force_refresh_display'):
+                            uart_wrapper.uart_tool.force_refresh_display()
+                            print("UART工具特殊刷新完成")
+                
+                # 处理CAN工具
+                elif "CAN" in tab_text and 'can' in self.tools:
+                    can_wrapper = self.tools['can']
+                    if hasattr(can_wrapper, 'can_tool') and can_wrapper.can_tool:
+                        if hasattr(can_wrapper.can_tool, 'force_refresh_display'):
+                            can_wrapper.can_tool.force_refresh_display()
+                            print("CAN工具特殊刷新完成")
+                
+                # 处理Modbus工具
+                elif "Modbus" in tab_text and 'modbus' in self.tools:
+                    modbus_wrapper = self.tools['modbus']
+                    if hasattr(modbus_wrapper, 'modbus_tool') and modbus_wrapper.modbus_tool:
+                        if hasattr(modbus_wrapper.modbus_tool, 'force_refresh_display'):
+                            modbus_wrapper.modbus_tool.force_refresh_display()
+                            print("Modbus工具特殊刷新完成")
+                            
+        except Exception as e:
+            print(f"工具特殊刷新错误: {e}")
+    
+    def recursive_update_widgets(self, widget):
+        """递归更新所有子控件"""
+        try:
+            # 更新当前控件
+            widget.update_idletasks()
+            
+            # 递归更新所有子控件
+            for child in widget.winfo_children():
+                self.recursive_update_widgets(child)
+                
+        except Exception as e:
+            # 忽略更新错误，避免影响其他控件
+            pass
+
     def on_language_change(self, event=None):
         """语言选择改变事件"""
         selected_lang = self.lang_var.get()

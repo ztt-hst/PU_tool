@@ -24,9 +24,9 @@
                 "offset": 1
             },
             {
-                "name": "Spec899ProtocolVersion",
-                "label": "Spec 899 protocol version",
-                "desc": "Spec 899 protocol version",
+                "name": "Spec64900ProtocolVersion",
+                "label": "Spec 64900 protocol version",
+                "desc": "Spec 64900 protocol version",
                 "type": "uint16",
                 "size": 1,
                 "offset": 2
@@ -135,7 +135,7 @@
                 "desc": "SVR Accelerometer X axis",
                 "type": "int16",
                 "size": 1,
-                "units": "m/s2",
+                "units": "milli-g",
                 "offset": 17
             },
             {
@@ -144,7 +144,7 @@
                 "desc": "SVR Accelerometer Y axis",
                 "type": "int16",
                 "size": 1,
-                "units": "m/s2",
+                "units": "milli-g",
                 "offset": 18
             },
             {
@@ -153,7 +153,7 @@
                 "desc": "SVR Accelerometer Z axis",
                 "type": "int16",
                 "size": 1,
-                "units": "m/s2",
+                "units": "milli-g",
                 "offset": 19
             },
             {

@@ -91,55 +91,15 @@ class SunSpecProtocol:
             # 取出对应寄存器
             if offset + size <= len(data):
                 regs = data[offset:offset+size]
-                # 解析类型
-                if field_type in ['uint16', 'sunssf']:
-                    raw_value = regs[0]
-                    if field_type == 'sunssf' or field_type == 'int16':
-                        # 有符号
-                        if raw_value > 32767:
-                            raw_value = raw_value - 65536
-                    value = raw_value
-                elif field_type == 'int16':
-                    raw_value = regs[0]
-                    if raw_value > 32767:
-                        raw_value = raw_value - 65536
-                    value = raw_value
-                elif field_type == 'uint32':
-                    raw_value = (regs[0] << 16) | regs[1]
-                    value = raw_value
-                elif field_type == 'int32':
-                    raw_value = (regs[0] << 16) | regs[1]
-                    if raw_value > 0x7FFFFFFF:
-                        raw_value = raw_value - 0x100000000
-                    value = raw_value
-                elif field_type == 'enum16':
-                    # enum16 使用1个寄存器，按uint16解析
-                    raw_value = regs[0]
-                    value = raw_value
-                elif field_type == 'bitfield32':
-                    # bitfield32 使用2个寄存器，按uint32解析
-                    raw_value = (regs[0] << 16) | regs[1]
-                    value = raw_value
-                elif field_type == 'string':
-                    # 每个寄存器2字节，拼接为字符串
-                    chars = []
-                    for reg in regs:
-                        chars.append(chr((reg >> 8) & 0xFF))
-                        chars.append(chr(reg & 0xFF))
-                    value = ''.join(chars).rstrip('\x00').strip()
-                    raw_value = value
-                elif field_type == "hex":
-                    # hex类型：直接显示16进制数据
-                    hex_values = []
-                    for reg in regs:
-                        hex_values.append(f"{reg:04X}")
-                    value = ' '.join(hex_values)  # 用空格分隔多个寄存器
-                    raw_value = value
-                else:
-                    # 其他类型直接显示原始
-                    value = regs[0]
-                    raw_value = regs[0]
+                # 调试输出
+                # if field_type == 'string' and size <= 8:
+                #     print(f"DEBUG {name}: offset={offset}, size={size}, data_len={len(data)}")
+                #     print(f"DEBUG {name}: regs={[hex(r) for r in regs]}")
+                
+                # 使用统一的数据类型解析器
+                value, raw_value = self._parse_data_by_type(regs, field_type, size)
             else:
+                # print(f"DEBUG {name}: 数据长度不足 - offset={offset}, size={size}, data_len={len(data)}")
                 value = None
                 raw_value = None
 
@@ -155,6 +115,7 @@ class SunSpecProtocol:
             }
             
             current_offset = offset + size
+
         # 解析子groups部分（动态重复）
         if groups:
             # 计算固定points部分的长度
@@ -200,48 +161,8 @@ class SunSpecProtocol:
                             if data_offset + gp_size <= len(data):
                                 regs = data[data_offset:data_offset + gp_size]
                                 
-                                # 解析类型（复用相同的解析逻辑）
-                                if gp_type in ['uint16', 'sunssf']:
-                                    raw_value = regs[0]
-                                    if gp_type == 'sunssf':
-                                        if raw_value > 32767:
-                                            raw_value = raw_value - 65536
-                                    value = raw_value
-                                elif gp_type == 'int16':
-                                    raw_value = regs[0]
-                                    if raw_value > 32767:
-                                        raw_value = raw_value - 65536
-                                    value = raw_value
-                                elif gp_type == 'uint32':
-                                    raw_value = (regs[0] << 16) | regs[1]
-                                    value = raw_value
-                                elif gp_type == 'int32':
-                                    raw_value = (regs[0] << 16) | regs[1]
-                                    if raw_value > 0x7FFFFFFF:
-                                        raw_value = raw_value - 0x100000000
-                                    value = raw_value
-                                elif gp_type == 'enum16':
-                                    raw_value = regs[0]
-                                    value = raw_value
-                                elif gp_type == 'bitfield32':
-                                    raw_value = (regs[0] << 16) | regs[1]
-                                    value = raw_value
-                                elif gp_type == 'string':
-                                    chars = []
-                                    for reg in regs:
-                                        chars.append(chr((reg >> 8) & 0xFF))
-                                        chars.append(chr(reg & 0xFF))
-                                    value = ''.join(chars).rstrip('\x00').strip()
-                                    raw_value = value
-                                elif gp_type == "hex":
-                                    hex_values = []
-                                    for reg in regs:
-                                        hex_values.append(f"{reg:04X}")
-                                    value = ' '.join(hex_values)
-                                    raw_value = value
-                                else:
-                                    value = regs[0]
-                                    raw_value = regs[0]
+                                # 使用统一的数据类型解析器
+                                value, raw_value = self._parse_data_by_type(regs, gp_type, gp_size)
                             else:
                                 value = None
                                 raw_value = None
@@ -269,12 +190,16 @@ class SunSpecProtocol:
 
     def parse_single_field(self, table_id, field_name, data):
         """解析单个字段，根据type和size解析"""
+        #print(f"DEBUG: parse_single_field called with table_id={table_id}, field_name={field_name}, data={data}")
+        
         if table_id not in self.models:
+            #print(f"DEBUG: table_id {table_id} not found in models")
             return None
             
         model_data = self.models[table_id]
         points = model_data['group']['points']
-         # 首先检查是否是动态group字段
+        
+        # 首先检查是否是动态group字段
         if '_' in field_name and field_name.count('_') >= 2:
             #print(f"DEBUG: Checking dynamic group field: {field_name}")
             # 动态group字段格式：GroupName_index_fieldName
@@ -315,89 +240,34 @@ class SunSpecProtocol:
                     #print(f"DEBUG: ValueError parsing group index from {parts[1]}")
                     pass  # 如果无法解析索引，继续尝试普通字段解析
         
-        #普通字段解析
+        # 普通字段解析
+        #print(f"DEBUG: Trying normal field parsing for {field_name}")
         for point in points:
             if point['name'] == field_name:
+                #print(f"DEBUG: Found normal field: {field_name}")
                 field_type = point['type'].lower()
                 size = point.get('size', 1)
                 
                 # 检查数据长度是否足够
                 if len(data) < size:
+                    ##print(f"DEBUG: Data length {len(data)} insufficient for size {size}")
                     return None
                 
                 # 解析数据
                 result = self._parse_field_data(data, field_type, size, point, field_name)
-                #print(f"DEBUG: Parse result: {result}")
+                ##print(f"DEBUG: Parse result: {result}")
                 return result
         
+        ##print(f"DEBUG: Field {field_name} not found anywhere")
         return None
+
     def _parse_field_data(self, data, field_type, size, point, field_name):
         """解析字段数据的通用方法"""
-        # 根据类型解析
-        if field_type in ['uint16', 'sunssf']:
-            raw_value = data[0]
-            if field_type == 'sunssf':
-                # sunssf是有符号的
-                if raw_value > 32767:
-                    raw_value = raw_value - 65536
-            value = raw_value
-            
-        elif field_type == 'int16':
-            raw_value = data[0]
-            if raw_value > 32767:
-                raw_value = raw_value - 65536
-            value = raw_value
-            
-        elif field_type == 'uint32':
-            if size >= 2:
-                raw_value = (data[0] << 16) | data[1]
-                value = raw_value
-            else:
-                return None
-                
-        elif field_type == 'int32':
-            if size >= 2:
-                raw_value = (data[0] << 16) | data[1]
-                if raw_value > 0x7FFFFFFF:
-                    raw_value = raw_value - 0x100000000
-                value = raw_value
-            else:
-                return None
-                
-        elif field_type == 'enum16':
-            # enum16 使用1个寄存器，按uint16解析
-            raw_value = data[0]
-            value = raw_value
-            
-        elif field_type == 'bitfield32':
-            # bitfield32 使用2个寄存器，按uint32解析
-            if size >= 2:
-                raw_value = (data[0] << 16) | data[1]
-                value = raw_value
-            else:
-                return None
-                
-        elif field_type == 'string':
-            # 字符串解析：每个寄存器2字节
-            chars = []
-            for reg in data:                      
-                chars.append(chr((reg >> 8) & 0xFF))
-                chars.append(chr(reg & 0xFF))
-            value = ''.join(chars).rstrip('\x00').strip()
-            raw_value = value
-            
-        elif field_type == "hex":
-            # hex类型：直接显示16进制数据
-            hex_values = []
-            for reg in data:
-                hex_values.append(f"{reg:04X}")
-            value = ' '.join(hex_values)  # 用空格分隔多个寄存器
-            raw_value = value
-            
-        else:
-            # 其他类型直接显示原始
-            value = data[0]
-            raw_value = data[0]
+        # 使用统一的数据类型解析器
+        value, raw_value = self._parse_data_by_type(data, field_type, size)
+        
+        if value is None:
+            return None
         
         # 移除缩放因子处理，统一显示原始值
         return {
@@ -409,6 +279,91 @@ class SunSpecProtocol:
             'description': point.get('desc', ''),
             'access': 'rw' if 'access' in point and point['access'] == 'RW' else 'r'
         }
+
+    def _parse_data_by_type(self, data, field_type, size):
+        """
+        统一的数据类型解析方法
+        返回 (value, raw_value) 元组，解析失败时返回 (None, None)
+        """
+        if not data or len(data) == 0:
+            return None, None
+            
+        field_type = field_type.lower()
+        
+        if field_type in ['uint16', 'sunssf']:
+            raw_value = data[0]
+            if field_type == 'sunssf':
+                # sunssf是有符号的
+                if raw_value > 32767:
+                    raw_value = raw_value - 65536
+            return raw_value, raw_value
+            
+        elif field_type == 'int16':
+            raw_value = data[0]
+            if raw_value > 32767:
+                raw_value = raw_value - 65536
+            return raw_value, raw_value
+            
+        elif field_type == 'uint32':
+            if size >= 2 and len(data) >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                return raw_value, raw_value
+            else:
+                return None, None
+                
+        elif field_type == 'int32':
+            if size >= 2 and len(data) >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                if raw_value > 0x7FFFFFFF:
+                    raw_value = raw_value - 0x100000000
+                return raw_value, raw_value
+            else:
+                return None, None
+                
+        elif field_type == 'enum16':
+            # enum16 使用1个寄存器，按uint16解析
+            raw_value = data[0]
+            return raw_value, raw_value
+            
+        elif field_type == 'bitfield32':
+            # bitfield32 使用2个寄存器，按uint32解析，显示为十六进制
+            if size >= 2 and len(data) >= 2:
+                raw_value = (data[0] << 16) | data[1]
+                value = f"{raw_value:08X}"  # 32位十六进制格式
+                return value, raw_value
+            else:
+                return None, None
+                
+        elif field_type == 'string':
+            # 字符串解析：每个寄存器2字节
+            chars = []
+            for reg in data:
+                high_byte = (reg >> 8) & 0xFF
+                low_byte = reg & 0xFF
+                chars.append(chr(high_byte))  # 高字节在前
+                chars.append(chr(low_byte))   # 低字节在后
+            value = ''.join(chars).rstrip('\x00').strip()
+            return value, value
+            
+        elif field_type == "hex":
+            # hex类型：直接显示16进制数据
+            hex_values = []
+            for reg in data:
+                hex_values.append(f"{reg:04X}")
+            
+            if size == 16 and len(hex_values) == 16:
+                # size为16时，分两行显示
+                line1 = ' '.join(hex_values[:8])
+                line2 = ' '.join(hex_values[8:])
+                value = f"{line1}\n{line2}"
+            else:
+                value = ' '.join(hex_values)  # 用空格分隔多个寄存器
+            return value, value
+            
+        else:
+            # 其他类型直接显示原始
+            raw_value = data[0]
+            return raw_value, raw_value
     def set_model_base_address(self, model_id, address):
         """设置特定模型的基地址"""
         self.model_base_addrs[model_id] = address

@@ -1513,6 +1513,44 @@ class CANHostComputer:
                 self.data_tree.tag_configure('heartbeat_stop', foreground=color)
                 self.data_tree.item(item, tags=('heartbeat_stop',))
                 break
+    
+    def force_refresh_display(self):
+        """强制刷新显示，解决标签页切换后控件不显示的问题"""
+        try:
+            # 强制更新主框架
+            if hasattr(self, 'main_frame'):
+                self.main_frame.update_idletasks()
+                
+            # 强制更新表格
+            if hasattr(self, 'data_tree'):
+                self.data_tree.update_idletasks()
+                
+            if hasattr(self, 'send_data_tree'):
+                self.send_data_tree.update_idletasks()
+                
+            # 强制更新日志文本框
+            if hasattr(self, 'log_text'):
+                self.log_text.update_idletasks()
+                
+            # 递归更新所有子控件
+            self.recursive_update_widgets(self.main_frame)
+            
+        except Exception as e:
+            print(f"CAN工具强制刷新显示错误: {e}")
+    
+    def recursive_update_widgets(self, widget):
+        """递归更新所有子控件"""
+        try:
+            # 更新当前控件
+            widget.update_idletasks()
+            
+            # 递归更新所有子控件
+            for child in widget.winfo_children():
+                self.recursive_update_widgets(child)
+                
+        except Exception as e:
+            # 忽略更新错误，避免影响其他控件
+            pass
 
 def main():
     # 独立运行模式

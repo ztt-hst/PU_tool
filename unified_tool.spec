@@ -21,7 +21,7 @@ a = Analysis(
         ('mobus_tool/model_802.json', '.'),
         ('mobus_tool/model_805.json', '.'),
         ('mobus_tool/model_64900.json', '.'),
-        ('mobus_tool/model_64901.json', '.'),
+        ('mobus_tool/model_64950.json', '.'),
         ('mobus_tool/model_899.json', '.'),
 
         # UART 资源（改到根目录，代码直接找 label.json / uart_command_set.json）

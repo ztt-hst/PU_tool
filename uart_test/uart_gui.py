@@ -695,7 +695,17 @@ class UARTTestGUI:
             self.scrollable_frame.columnconfigure(0, weight=1)
 
             # 添加鼠标滚轮支持
-            self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+            def _on_canvas_mousewheel(event):
+                self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            def _bind_canvas_mousewheel(event):
+                self.canvas.bind_all("<MouseWheel>", _on_canvas_mousewheel)
+            
+            def _unbind_canvas_mousewheel(event):
+                self.canvas.unbind_all("<MouseWheel>")
+            
+            self.canvas.bind('<Enter>', _bind_canvas_mousewheel)
+            self.canvas.bind('<Leave>', _unbind_canvas_mousewheel)
 
 
             # Update communication log frame
@@ -716,6 +726,19 @@ class UARTTestGUI:
 
             # Configure log text widget禁止输入
             self.log_text.configure(state='disabled')
+            
+            # 为日志文本框添加鼠标滚轮支持
+            def _on_log_mousewheel(event):
+                self.log_text.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            def _bind_log_mousewheel(event):
+                self.log_text.bind_all("<MouseWheel>", _on_log_mousewheel)
+            
+            def _unbind_log_mousewheel(event):
+                self.log_text.unbind_all("<MouseWheel>")
+            
+            self.log_text.bind('<Enter>', _bind_log_mousewheel)
+            self.log_text.bind('<Leave>', _unbind_log_mousewheel)
 
             # Add clear log button
             self.clear_log_btn = ttk.Button(self.log_frame, text=self.get_label("clear_log"),
@@ -743,13 +766,6 @@ class UARTTestGUI:
                 f.write(error_details)
             raise
 
-    def _on_mousewheel(self, event):
-        """处理鼠标滚轮事件"""
-        try:
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        except Exception as e:
-            # 忽略滚动错误
-            pass
 
     def on_canvas_configure(self, event):
         """处理画布大小变化事件"""
@@ -766,6 +782,42 @@ class UARTTestGUI:
             with open('error_log.txt', 'a', encoding='utf-8') as f:
                 f.write(f"\n窗口调整错误: {str(e)}\n")
                 f.write(traceback.format_exc())
+    
+    def force_refresh_display(self):
+        """强制刷新显示，解决标签页切换后控件不显示的问题"""
+        try:
+            # 强制更新画布
+            if hasattr(self, 'canvas'):
+                self.canvas.update_idletasks()
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+                
+            # 强制更新滚动框架
+            if hasattr(self, 'scrollable_frame'):
+                self.scrollable_frame.update_idletasks()
+                
+            # 强制更新主框架
+            if hasattr(self, 'main_frame'):
+                self.main_frame.update_idletasks()
+                
+            # 递归更新所有子控件
+            self.recursive_update_widgets(self.main_frame)
+            
+        except Exception as e:
+            print(f"强制刷新显示错误: {e}")
+    
+    def recursive_update_widgets(self, widget):
+        """递归更新所有子控件"""
+        try:
+            # 更新当前控件
+            widget.update_idletasks()
+            
+            # 递归更新所有子控件
+            for child in widget.winfo_children():
+                self.recursive_update_widgets(child)
+                
+        except Exception as e:
+            # 忽略更新错误，避免影响其他控件
+            pass
 
     def refresh_ports(self):
         """Refresh the available serial ports list"""
@@ -1121,14 +1173,22 @@ class UARTTestGUI:
                 #self.root.update_idletasks()  # 强制刷新
             except Exception as e:
                 print("Log append error:", e)
-        self.root.after(0, append_log)
+        
+        # 修复：在嵌入模式下使用父框架的根窗口
+        if self.is_embedded and self.parent_frame:
+            self.parent_frame.winfo_toplevel().after(0, append_log)
+        elif self.root:
+            self.root.after(0, append_log)
+        else:
+            # 如果都没有，直接执行
+            append_log()
 
     def update_item_display(self, addr, value):
         # addr 是 int 类型，转成 0xXXXX 格式字符串
         addr_hex = f"0x{addr:04X}"
         #signed_value = to_signed(value, bits=32)
         if addr_hex in self.result_vars:
-            self.result_vars[addr_hex].set(str(value));
+            self.result_vars[addr_hex].set(str(value))
             #self.result_vars[addr_hex].set(str(signed_value))
             #self.add_to_log(f"MCU report: {addr_hex} = {signed_value}")
         else:
